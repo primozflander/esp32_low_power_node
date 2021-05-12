@@ -11,14 +11,10 @@
 #define SNZ_PWR_PIN 19
 #define BATT_LVL_PIN 33
 #define uS_TO_S_FACTOR 1000000ULL
-#define TIME_TO_SLEEP 10
-#define DATA_DIFF_TO_SEND 0.5
-// RTC_DATA_ATTR int bootCount = 0;
+#define TIME_TO_SLEEP 600
 const int PORT = 8080;
 const int IDX_tb = 2;
 const int IDX_lux = 3;
-// int batteryLevel = 50;
-// int rssiLevel = 0;
 unsigned long previousMillis = millis();
 unsigned long startMillis = 0;
 float temp, hum, bar, lux;
@@ -27,7 +23,6 @@ BH1750 lightMeter;
 BME280I2C bme;
 HTTPClient http;
 
-// RTC_DATA_ATTR int bootCount;
 RTC_DATA_ATTR float tempOld;
 RTC_DATA_ATTR float barOld;
 RTC_DATA_ATTR float luxOld;
@@ -35,22 +30,14 @@ RTC_DATA_ATTR float luxOld;
 void goToSleep()
 {
     digitalWrite(SNZ_PWR_PIN, LOW);
-    //client.disconnect();
-    //------->yield();
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
-    //esp_wifi_stop();
-    //ESP.deepSleep(deep_sleep, WAKE_RF_DEFAULT);
     esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
     // esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-    // esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
-
-    // DEBUG_PRINTLN("Setup ESP32 to sleep for every " + String(TIME_TO_SLEEP) + " Seconds");
-    // Serial.flush();
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
     DEBUG_PRINTLN("About to go to sleep, time taken to complete cycle: " + String(millis() - startMillis));
     Serial.flush(); 
     esp_deep_sleep_start();
-    // delay(250);
 }
 
 void setupWifi()
@@ -59,26 +46,18 @@ void setupWifi()
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED)
     {
-        // delay(250);
-        // Serial.print(".");
         if (millis() - startMillis > 10000)
         {
             DEBUG_PRINTLN("Taken too long to connect to WiFi. Going to sleep");
             goToSleep();
         }
     }
-    
     rssiLevel = map(WiFi.RSSI(), -98, -50, 0, 10);
-    // DEBUG_PRINTLN("RSSI: " + String(rssiLevel));
     DEBUG_PRINTLN("WiFi connected, RSSI: " + String(rssiLevel));
 }
 
 void sendToServer(String url)
 {
-    // Serial.print("connecting to ");
-    // DEBUG_PRINTLN(HOST);
-    // Serial.print("Requesting URL: ");
-    // DEBUG_PRINTLN(url);
     http.begin(HOST, PORT, url);
     int httpCode = http.GET();
     if (httpCode)
@@ -86,11 +65,9 @@ void sendToServer(String url)
         if (httpCode == 200)
         {
             String payload = http.getString();
-            // DEBUG_PRINTLN("Domoticz response ");
             DEBUG_PRINTLN(payload);
         }
     }
-    // DEBUG_PRINTLN("closing connection");
     http.end();
 }
 
@@ -104,17 +81,17 @@ void getMeasurements()
 
 bool hasDataChanged()
 {
-    DEBUG_PRINTLN("Temp: " + String(tempOld));
-    DEBUG_PRINTLN("Bar: " + String(barOld));
-    DEBUG_PRINTLN("Lux: " + String(luxOld));
-    if ((abs(temp - tempOld) > DATA_DIFF_TO_SEND) || (abs(bar - barOld) > DATA_DIFF_TO_SEND) || (abs(lux - luxOld) > DATA_DIFF_TO_SEND))
+    // DEBUG_PRINTLN("Temp: " + String(tempOld));
+    // DEBUG_PRINTLN("Bar: " + String(barOld));
+    // DEBUG_PRINTLN("Lux: " + String(luxOld));
+    if ((abs(temp - tempOld) > 0.5) || (abs(bar - barOld) > 1) || (abs(lux - luxOld) > 5))
     {
         tempOld = temp;
         barOld = bar;
         luxOld = lux;
-        DEBUG_PRINTLN("Temp new: " + String(tempOld));
-        DEBUG_PRINTLN("Bar new: " + String(barOld));
-        DEBUG_PRINTLN("Lux new: " + String(luxOld));
+        // DEBUG_PRINTLN("Temp new: " + String(tempOld));
+        // DEBUG_PRINTLN("Bar new: " + String(barOld));
+        // DEBUG_PRINTLN("Lux new: " + String(luxOld));
         return true;
     }
     else return false;
@@ -147,28 +124,9 @@ void init()
 
 void setup()
 {
-
-    // while(1)
-    // {
-    //     DEBUG_PRINTLN(analogRead(BATT_LVL_PIN));
-    // }
     init();
     getMeasurements();
     transmitData();
-    
-    // while (!Serial)
-    // bootCount++;
-    // DEBUG_PRINTLN("Boot number: " + String(bootCount));
-    // delay(10);
-
-    // delay(100);
-
-    // lightMeter.setMTreg(32);
-    // lightMeter.begin();
-    // BME280::TempUnit tempUnit(BME280::TempUnit_Celsius);
-    // BME280::PresUnit presUnit(BME280::PresUnit_Pa);
-    // DEBUG_PRINTLN("Setup successful");
-
     goToSleep();
 }
 
